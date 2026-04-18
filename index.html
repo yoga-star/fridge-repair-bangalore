@@ -652,10 +652,10 @@ footer ul a:hover{color:var(--accent)}
       <div class="hero-card" id="book">
         <h3>Get a Free Quote in 60 Seconds</h3>
         <p class="hc-sub">A technician will call you back within 10 minutes.</p>
-        <form class="hero-form" onsubmit="event.preventDefault(); gtag_report_form_conversion(); this.querySelector('button').textContent='✓ Request Sent — we’ll call in 10 min'; this.querySelector('button').disabled=true;">
-          <input type="text" placeholder="Your full name" required />
-          <input type="tel" placeholder="Mobile number" pattern="[0-9+\-\s]{10,}" required />
-          <select required>
+        <form class="hero-form" id="leadForm" novalidate>
+          <input type="text" name="name" placeholder="Your full name" required />
+          <input type="tel" name="phone" placeholder="Mobile number" pattern="[0-9+\-\s]{10,}" required />
+          <select name="problem" required>
             <option value="">What's the problem?</option>
             <option>Fridge not cooling</option>
             <option>Water leakage</option>
@@ -664,15 +664,20 @@ footer ul a:hover{color:var(--accent)}
             <option>Compressor not starting</option>
             <option>Other — will describe on call</option>
           </select>
-          <select required>
+          <select name="area" required>
             <option value="">Your area in Bangalore</option>
             <option>Whitefield</option><option>Electronic City</option>
             <option>Koramangala</option><option>HSR Layout</option>
             <option>Indiranagar</option><option>Marathahalli</option>
             <option>Jayanagar</option><option>Other Bangalore</option>
           </select>
+          <!-- honeypot + metadata for Formsubmit -->
+          <input type="text" name="_honey" style="display:none" tabindex="-1" autocomplete="off" />
+          <input type="hidden" name="_subject" value="New Fridge Repair Lead — fridgerepairpro.in" />
+          <input type="hidden" name="_template" value="table" />
+          <input type="hidden" name="_captcha" value="false" />
           <button type="submit" class="btn btn-primary">Get Free Quote →</button>
-          <p class="fine">🔒 No spam. We’ll only call about your repair.</p>
+          <p class="fine" id="formFine">🔒 No spam. We’ll only call about your repair.</p>
         </form>
       </div>
       <div class="hero-float f2"><span class="dot">★</span> 4.8 rating · 1,247 reviews</div>
@@ -1050,6 +1055,66 @@ const io = new IntersectionObserver((entries) => {
   entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
 }, { threshold: 0.12 });
 document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+
+// Lead form: send to owner's email via Formsubmit + open WhatsApp with details
+(function(){
+  const form = document.getElementById('leadForm');
+  if (!form) return;
+  const OWNER_EMAIL = 'fridgerepairp@gmail.com';
+  const OWNER_WHATSAPP = '917337631617';
+
+  form.addEventListener('submit', async function(e){
+    e.preventDefault();
+    if (!form.reportValidity()) return;
+
+    const data = new FormData(form);
+    const name = (data.get('name')||'').toString().trim();
+    const phone = (data.get('phone')||'').toString().trim();
+    const problem = (data.get('problem')||'').toString();
+    const area = (data.get('area')||'').toString();
+
+    const btn = form.querySelector('button[type="submit"]');
+    const fine = document.getElementById('formFine');
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+
+    // 1) Fire Google Ads conversion
+    try { gtag_report_form_conversion(); } catch(_) {}
+
+    // 2) Send to owner's email via Formsubmit (no signup — activation email on first submit)
+    try {
+      await fetch('https://formsubmit.co/ajax/' + encodeURIComponent(OWNER_EMAIL), {
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name, phone, problem, area,
+          source: 'fridgerepairpro.in hero form',
+          submitted_at: new Date().toISOString(),
+          _subject: 'New Fridge Repair Lead — ' + name,
+          _template: 'table',
+          _captcha: 'false'
+        })
+      });
+    } catch(err) { /* silent — WhatsApp fallback still runs */ }
+
+    // 3) Open WhatsApp with pre-filled message to owner
+    const msg =
+      '*New Fridge Repair Lead*%0A%0A' +
+      '*Name:* ' + encodeURIComponent(name) + '%0A' +
+      '*Phone:* ' + encodeURIComponent(phone) + '%0A' +
+      '*Problem:* ' + encodeURIComponent(problem) + '%0A' +
+      '*Area:* ' + encodeURIComponent(area) + '%0A%0A' +
+      'Please send a technician.';
+    const waUrl = 'https://wa.me/' + OWNER_WHATSAPP + '?text=' + msg;
+    window.open(waUrl, '_blank');
+
+    // 4) Inline success state
+    btn.textContent = '✓ Request Sent — we’ll call in 10 min';
+    btn.style.background = '#16A34A';
+    if (fine) fine.textContent = "Also opened WhatsApp — tap send to confirm your booking.";
+    form.querySelectorAll('input, select').forEach(el => el.disabled = true);
+  });
+})();
 
 // Hero image: try each fallback path in sequence before giving up
 (function(){
